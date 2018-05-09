@@ -1,5 +1,6 @@
 local new_tracer = require "opentracing.tracer".new
 local zipkin_codec = require "kong.plugins.zipkin.codec"
+local jaeger_codec = require "kong.plugins.zipkin.jaeger_codec"
 local new_random_sampler = require "kong.plugins.zipkin.random_sampler".new
 local new_zipkin_reporter = require "kong.plugins.zipkin.reporter".new
 local OpenTracingHandler = require "kong.plugins.zipkin.opentracing"
@@ -10,11 +11,21 @@ ZipkinLogHandler.VERSION = "0.0.1"
 
 function ZipkinLogHandler:new_tracer(conf)
 	local tracer = new_tracer(new_zipkin_reporter(conf), new_random_sampler(conf))
-	tracer:register_injector("http_headers", zipkin_codec.new_injector())
+	if conf.vendor == "zipkin" then
+		tracer:register_injector("http_headers", zipkin_codec.new_injector())
+	end
+	if conf.vendor == "jaeger" then
+		tracer:register_injector("http_headers", jaeger_codec.new_injector())
+	end
 	local function warn(str)
 		ngx.log(ngx.WARN, "[", self._name, "] ", str)
 	end
-	tracer:register_extractor("http_headers", zipkin_codec.new_extractor(warn))
+	if conf.vendor == "zipkin" then
+		tracer:register_extractor("http_headers", zipkin_codec.new_extractor(warn))
+	end
+	if conf.vendor == "jaeger" then
+		tracer:register_extractor("http_headers", jaeger_codec.new_extractor(warn))
+	end
 	return tracer
 end
 

@@ -1,7 +1,9 @@
 local Errors = require "kong.dao.errors"
+local vendors = {"jaeger", "zipkin", "skywalking"}
 
 return {
 	fields = {
+		vendor = {required = true, type = "string", enum = vendors }
 		http_endpoint = { required = true, type = "url" },
 		sample_ratio = { default = 0.001, type = "number" },
 	},

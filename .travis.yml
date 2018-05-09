@@ -2,19 +2,19 @@ language: python
 
 sudo: false
 
-branches:
-  only:
-    - master
-
 before_install:
   - pip install hererocks
   - hererocks ~/hererocks -r^ --luajit 2.1
   - export PATH=$PATH:~/hererocks/bin
   - eval $(luarocks path --bin)
   - luarocks install luacheck
+  - luarocks install luaunit
+  - luarocks install kong
+  - luarocks install --server=http://luarocks.org/dev opentracing
 
 script:
-  - luacheck .
+  - lua test/unit/base_case.lua
+  - lua test/unit/test_jaeger_codec.lua
 
 notifications:
   email:
