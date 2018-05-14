@@ -1,4 +1,4 @@
--- local to_hex = require "resty.string".to_hex
+local to_hex = require "resty.string".to_hex
 local new_span_context = require "opentracing.span_context".new
 
 local function hex_to_char(c)
@@ -14,25 +14,6 @@ end
 
 local function new_extractor(warn)
 	return function(headers)
-		-- X-B3-Sampled: if an upstream decided to sample this request, we do too.
-		local sample = headers["x-b3-sampled"]
-		if sample == "1" or sample == "true" then
-			sample = true
-		elseif sample == "0" or sample == "false" then
-			sample = false
-		elseif sample ~= nil then
-			warn("x-b3-sampled header invalid; ignoring.")
-			sample = nil
-		end
-
-		-- X-B3-Flags: if it equals '1' then it overrides sampling policy
-		-- We still want to warn on invalid sample header, so do this after the above
-		local debug = headers["x-b3-flags"]
-		if debug == "1" then
-			sample = true
-		elseif debug ~= nil then
-			warn("x-b3-flags header invalid; ignoring.")
-		end
 
 		local had_invalid_id = false
 
@@ -52,17 +33,24 @@ local function new_extractor(warn)
 		end
 
 
-
 		local function validate_user_trace_id(trace_id, validate_trace_id_function, validate_span_id_function, validate_parent_span_id_function, validate_flags_function)
 			-- add validation here
-			return validate_trace_id_function() and validate_span_id_function() and validate_parent_span_id_function() and validate_flags_function()
+			sep = ":"
+			trace_id = trace_id .. sep
+			splitted = {trace_id:match((trace_id:gsub("[^"..sep.."]*"..sep, "([^"..sep.."]*)"..sep)))}
+			local trace = splitted[1]
+			local span = splitted[2]
+			local parentspan = splitted[3]
+			local flags = splitted[4]
+
+			return validate_trace_id_function(trace) and validate_span_id_function(span) and validate_parent_span_id_function(parentspan) and validate_flags_function(flags)
 		end
 
 		-- Validate trace id
 		if trace_id then
-			if validate_user_trace_id(trace_id, validate_trace_id, validate_span_id, validate_parent_span_id, validate_flags) == true then
+			if validate_user_trace_id(trace_id, validate_trace_id, validate_span_id, validate_parent_span_id, validate_flags) == false then
 				print("uber-trace-id header is invalid; ignoring.")
-				had_invalid_id = false
+				had_invalid_id = true
 			end
 		end
 
@@ -71,7 +59,7 @@ local function new_extractor(warn)
 			return nil
 		end
 
-		-- Process jaegar baggage header
+		-- Process jaeger baggage header
 		local baggage = {}
 		for k, v in pairs(headers) do
 			local baggage_key = k:match("^uberctx%-(.*)$")
@@ -91,12 +79,9 @@ end
 local function new_injector()
 	return function(span_context, headers)
 		-- We want to remove headers if already present
-		-- headers["x-b3-traceid"] = to_hex(span_context.trace_id)
-		-- headers["x-b3-parentspanid"] = span_context.parent_id and to_hex(span_context.parent_id) or nil
-		-- headers["x-b3-spanid"] = to_hex(span_context.span_id)
-		local Flags = ngx.req.get_headers()["x-b3-flags"] -- Get from request headers
-		headers["x-b3-flags"] = Flags
-		headers["x-b3-sampled"] = (not Flags) and (span_context.should_sample and "1" or "0") or nil
+		headers["x-b3-traceid"] = to_hex(span_context.trace_id)
+		headers["x-b3-parentspanid"] = span_context.parent_id and to_hex(span_context.parent_id) or nil
+		headers["x-b3-spanid"] = to_hex(span_context.span_id)
 		for key, value in span_context:each_baggage() do
 			-- XXX: https://github.com/opentracing/specification/issues/117
 			headers["uberctx-"..key] = ngx.escape_uri(value)

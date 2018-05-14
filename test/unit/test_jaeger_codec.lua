@@ -43,7 +43,7 @@ function TestJaegerCodec:testBasic()
     print(str)
   end
   headers = {}
-  headers["uber-trace-id"] = "bad_test_value"
+  headers["uber-trace-id"] = "86180188110ddbde:86180188110ddbde:0:1"
   extractor = jaeger_codec.new_extractor(warn)(headers)
 
 
